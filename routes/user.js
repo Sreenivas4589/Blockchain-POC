@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const User = require("../model/User");
 const bcrypt = require("bcryptjs");
+const _= require('lodash');
 const sgMail = require("@sendgrid/mail");
 const jwt = require("jsonwebtoken");
 const dotenv = require("dotenv");
@@ -176,6 +177,67 @@ router.get('/verifyemail/:token',async(req,res)=>{
     console.log(error);
     res.status(400).send("Error Msg")
   }
+});
+router.put("/forgot-password",async(req,res)=>{
+const {email}=req.body;
+User.findOne({email},(err,user)=>{
+  if(err || !user){
+    return res.status(400).json({error:"user with this mail does not exits"});
+  }
+const token =jwt.sign({_id:user._id},process.env.RESET_PASSWORD_KEY,{expiresIn:'20m'});
+const data={
+  to: `${req.body.email}`,
+  from: "sreenivasnaidu.ms@gmail.com",
+      subject: "Welcome to our platform",
+      html: ` <h2>Thank you for signing up to our platform , here are your wallet details </h2>
+      <p>${process.env.CLIENT_URL}/resetpassword/${token}</p>
+`};
+return user.updateOne({resetLink:token},function(err,success){
+if(err){
+  return res.status(400).json({error:"reset passwod link error"});
+}else{
+  sgMail.send(data, function (error, body) {
+
+    if(error){
+      return res.json({error:"error"});
+    }
+    res.status(400).send("email has been sent")
+  });
+
+}
+});
+})
+});
+
+router.put("/resetpassword",async(req,res)=>{
+const {resetLink,newpass}=req.body;
+if(resetLink){
+jwt.verify(resetLink,process.env.RESET_PASSWORD_KEY,function(err,decodedData) {
+  if(err){
+    return res.status(401).json({error:"incorrect token"});
+  }
+User.findOne({resetLink},(err,user)=>{
+  if(err || !user){
+    return res.status(400).json({error:"user with this token doesnot exits"});
+  }
+  const obj ={
+    password:newpass
+  }
+  user=_.extend(user,obj);
+  user.save((err,result)=>{
+if(err){
+  return res.status(400).json({error:"resetpassword error"});
+}else{
+  return res.status(200).json({message:"newpassword has been changed"});
+}
+  })
+})
+})
+
+}else{
+     res.status(401).json({error:"Authentication error"});
+}
+
 });
 
 
